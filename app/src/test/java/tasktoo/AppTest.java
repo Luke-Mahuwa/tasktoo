@@ -2,9 +2,11 @@ package tasktoo;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import org.w3c.dom.*;
+import org.xml.sax.Attributes;
+import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
 import java.io.File;
 import java.util.Scanner;
 
@@ -12,47 +14,59 @@ public class App {
     public static void main(String[] args) {
         try {
             File file = new File("data.xml");
-
-            // Check if the file exists
-            if (!file.exists()) {
-                System.out.println("Error: data.xml not found.");
-                return;
-            }
-
             Scanner scanner = new Scanner(System.in);
+
             System.out.print("Enter the XML tag name to extract: ");
-            String tagName = scanner.nextLine().trim();
+            String tagName = scanner.nextLine();
 
-            // Validate if the user input is empty
-            if (tagName.isEmpty()) {
-                System.out.println("Error: Tag name cannot be empty.");
-                return;
-            }
+            SAXParserFactory factory = SAXParserFactory.newInstance();
+            SAXParser saxParser = factory.newSAXParser();
 
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document doc = builder.parse(file);
+            // SAX Handler to process the XML events
+            DefaultHandler handler = new DefaultHandler() {
+                JSONArray jsonArray = new JSONArray();
+                String currentTag = "";
+                JSONObject jsonObject;
 
-            NodeList nodeList = doc.getElementsByTagName(tagName);
+                // Method for handling the start of an element
+                @Override
+                public void startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException {
+                    currentTag = qName;  // Track the current tag
+                    if (currentTag.equals(tagName)) {
+                        jsonObject = new JSONObject();
+                    }
+                }
 
-            // Check if there are matching tags
-            if (nodeList.getLength() == 0) {
-                System.out.println("Error: No tags found with the name " + tagName);
-                return;
-            }
+                // Method for handling the end of an element
+                @Override
+                public void endElement(String uri, String localName, String qName) throws SAXException {
+                    if (currentTag.equals(tagName)) {
+                        jsonArray.put(jsonObject);
+                    }
+                    currentTag = ""; // Reset tag after processing
+                }
 
-            JSONArray jsonArray = new JSONArray();
-            for (int i = 0; i < nodeList.getLength(); i++) {
-                JSONObject jsonObject = new JSONObject();
-                Node node = nodeList.item(i);
-                jsonObject.put("value", node.getTextContent().trim());
-                jsonArray.put(jsonObject);
-            }
+                // Method for handling the character data inside the element
+                @Override
+                public void characters(char[] ch, int start, int length) throws SAXException {
+                    if (currentTag.equals(tagName)) {
+                        jsonObject.put("value", new String(ch, start, length).trim());
+                    }
+                }
 
-            System.out.println("JSON Output:\n" + jsonArray.toString(2));
+                // Get the JSON array once parsing is complete
+                public JSONArray getJsonArray() {
+                    return jsonArray;
+                }
+            };
+
+            // Parse the file using the SAX parser
+            saxParser.parse(file, handler);
+
+            // Output the JSON result
+            System.out.println("JSON Output:\n" + handler.getJsonArray().toString(2));
 
         } catch (Exception e) {
-            System.out.println("An error occurred: " + e.getMessage());
             e.printStackTrace();
         }
     }
